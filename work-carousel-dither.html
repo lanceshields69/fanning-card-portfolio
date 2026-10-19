@@ -1,0 +1,503 @@
+<!-- Work carousel (dither version): paste into a Squarespace Code block (HTML).
+     The two background videos are replaced by one live Paper "Dithering" shader (ripple, 8x8).
+     Idle and hover use the settings from the two Paper frames (Dither-ripple-animation-1 and -2);
+     on hover the second shader fades in over the first. Needs one external module, loaded from jsDelivr
+     (@paper-design/shaders, pinned to 0.0.81). If it can't load, the dark background colour stays. -->
+<div class="lsw" aria-label="Selected work">
+  <div class="lsw-bg" aria-hidden="true"></div>
+  <div class="lsw-bg lsw-bg-hover" aria-hidden="true"></div>
+  <div class="lsw-stage"></div>
+</div>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400&family=Source+Serif+4:wght@400&display=swap" rel="stylesheet">
+
+<style>
+  .lsw {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1728 / 1117;
+    overflow: hidden;
+    background: #151B21; /* shows until the shader starts (and if WebGL is unavailable) */
+    touch-action: pan-y; /* page still scrolls vertically; sideways drags come to the script for swiping */
+  }
+  .lsw-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+  }
+  /* The hover shader sits over the idle one and is faded in with !important + extra specificity so
+     Squarespace's own fade styles can't interfere. */
+  html body .lsw .lsw-bg-hover {
+    opacity: 0 !important;
+    transition: opacity 0.45s ease !important;
+  }
+  html body .lsw.lsw--hover .lsw-bg-hover { opacity: 1 !important; }
+  .lsw-bg canvas { display: block; width: 100% !important; height: 100% !important; }
+  /* Stage is laid out in Figma units (1728 x 1117) and scaled to fit the container. */
+  .lsw-stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1728px;
+    height: 1117px;
+    transform-origin: 0 0;
+  }
+  .lsw-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 579px;
+    height: 326px;
+    margin: -163px 0 0 -289.5px; /* centre the card on its path point */
+    display: block;
+    will-change: transform, opacity;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* The link holds the path position and hit area; the face inside it does the scaling. */
+  .lsw-face {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    border-radius: 30px;
+    background: #fff;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+    will-change: transform;
+    transition: box-shadow 0.25s ease;
+  }
+  /* Soft edge lighting: a ~3px feathered highlight along the top and left edges that fades out
+     diagonally, replacing the old hard 1px white stroke. */
+  .lsw-face::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: 30px;
+    pointer-events: none;
+    box-shadow: inset 2px 2px 4px rgba(255, 255, 255, 0.46);
+    -webkit-mask-image: linear-gradient(135deg, #000 0%, rgba(0, 0, 0, 0.4) 30%, transparent 58%);
+    mask-image: linear-gradient(135deg, #000 0%, rgba(0, 0, 0, 0.4) 30%, transparent 58%);
+  }
+  .lsw-card img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  /* Project name: Figma position (centred at x 848, top 754 less 50), Inter Regular 48 / -0.04em */
+  .lsw-label {
+    position: absolute;
+    left: 848px;
+    top: 704px;
+    transform: translateX(-50%);
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-weight: 400;
+    font-size: 48px;
+    line-height: normal;
+    letter-spacing: -0.04em;
+    color: #fff;
+    text-align: center;
+    width: max-content;
+    max-width: 760px;
+    pointer-events: none;
+    z-index: 1000;
+  }
+  .lsw-label-name { white-space: nowrap; }
+  .lsw-label-desc {
+    margin-top: 10px;
+    font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    font-weight: 400;
+    font-size: 17px;
+    line-height: 1.45;
+    letter-spacing: 0;
+    color: rgba(255, 255, 255, 0.82);
+    white-space: normal;
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+    text-wrap: balance; /* avoids a one-word second line */
+  }
+  /* Squarespace's scroll-in animation adds preFade/fadeIn classes and inline fade styles to text it finds,
+     so the fade is pinned with !important and extra specificity to keep it under this script's control. */
+  html body .lsw .lsw-label {
+    opacity: 0 !important;
+    transition: opacity 0.18s ease 0s !important;
+  }
+  html body .lsw .lsw-label.is-on { opacity: 1 !important; }
+  /* Narrow panels (phones): the stage is laid out at 640 x 1100 so cards stay large and the panel is as tall as the page's other mobile sections, and the
+     caption leaves the scaled stage and is set in real pixels along the bottom. */
+  .lsw--narrow { aspect-ratio: 640 / 1100; }
+  .lsw--narrow .lsw-label {
+    left: 0;
+    right: 0;
+    top: 51.2%;          /* just under the centre card (563 / 1100 of the stage height)... */
+    bottom: 0;           /* ...down to the panel bottom, with the text centred in that space */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transform: none;
+    width: auto;
+    max-width: none;
+    padding: 0 20px;
+    box-sizing: border-box;
+    font-size: 24px;
+    text-align: center;
+  }
+  .lsw--narrow .lsw-label-desc {
+    margin-top: 6px;
+    font-size: 16px;
+    max-width: 440px;
+  }
+  .lsw-card:focus-visible { outline: none; }
+  .lsw-card:hover .lsw-face,
+  .lsw-card:focus-visible .lsw-face {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+  }
+  .lsw-card:focus-visible .lsw-face {
+    box-shadow: 0 0 0 3px #fff, 0 8px 32px rgba(0, 0, 0, 0.7);
+  }
+</style>
+
+<script>
+(function () {
+  var root = document.currentScript.parentNode.querySelector('.lsw');
+  if (!root || root.dataset.ready) return;
+  root.dataset.ready = '1';
+  var stage = root.querySelector('.lsw-stage');
+
+  var CDN = 'https://images.squarespace-cdn.com/content/v1/67707b671ee26f398aa645fd/';
+  var SITE = 'https://www.lanceshields.design/work/';
+  // [title, slug, image path, optional image crop] — the crop reproduces the Figma zoom.
+  // First five match the Figma layout (left to right); the rest follow around the ring.
+  var WORK = [
+    ['California Walnuts',  'california-walnuts',  '1736455246900-OWYDEML8TW7PQ04WF9YS/walnuts-thumbnail-0.jpg'],
+    ['Fitbit In-Store App', 'fitbit',              '1741728586190-3ZMHIQK5L9IJC76O9SG1/Fitbit-thumbnail-01.jpg', 'translateX(-3px) scale(1.45)'],
+    ['Adobe Express Photos','adobes-express-photos','2ee85659-a272-4e5f-93a5-ebb4a06e48ac/Adobe-Express-Photos-thumbnail-00.jpg'],
+    ['Redbull 400 Game',    'redbull-400-game',    '1736784312983-QAT883CJXV79AA502YJZ/redbullthumb-01.jpg', 'translateX(-3px) translateY(-25px) scale(1.3)'],
+    ['Respect Effect App',  'respect-effect-app',  '1737353754421-2CF7V390FA0FA6FHO295/Respect-Effect-thumbnail-0.jpg'],
+    ['Besure Insurance',    'besure',              '1736547987757-M4ZIIFCAZ3ZPIH7RWBWJ/Besure_thumbnail-01.jpg'],
+    ['ADP My Aline',        'adp-my-aline',        '7875c394-1650-448d-83fa-370bfc18f10f/ADP-thumbnail-8.jpg'],
+    ['That’s Not Cool','thats-not-cool',      '1735513685742-8NV1XKLZLMAOBBRIUKEN/TNC-humbnail-1.jpg'],
+    ['Adobe Express',       'adobe-express',       '1742194924263-MQ9BC23FU08UEZ7J5UGS/Express-thumbnails.jpg'],
+    ['Modular Suite for XD','modular-suite-for-xd','2ed97a7f-0a43-48ce-9801-9331ed10bc69/Modular-6.jpg'],
+    ['Modere eCommerce Site','modere-ecommerce-site','6d8d0c7a-34e1-49bf-bdb8-f514543f19e1/Modere-work-thumbnail.jpg'],
+    ['The Loop App',        'loop-app',            '1735486583071-RM3W6DFAXIFRKMQ55PDL/Loop-thumbnail-5.jpg'],
+    ['Adobe Express Platform','adobe-express-enterprise-platform','1742194776257-4N708L8LFPO9P7IX0VY6/extensibility-thumbnail-1.jpg'],
+    ['LegalOn’s AI Brand Platform','legalon','58e929b1-02ad-46d3-99bb-19631e7d7415/ON+Icon.png'],
+    ['Walmart AI Shopping','walmart','9a1c97db-6ca4-4792-92d8-c4c82b8991cf/christopher-campbell-rDEOVtE7vOs-unsplash+%281%29+1.jpg']
+  ];
+
+  // One-line summaries shown under the name on hover (facts from each case study).
+  var DESC = {
+    'california-walnuts': 'A redesign of walnuts.org for the California Walnut Board, built around recipes, nutrition and professional resources.',
+    'fitbit': 'An iPad app that helps shoppers pick the right Fitbit, rolled out to over 1,000 Best Buy and Target stores.',
+    'adobes-express-photos': 'An AI photo editor that turns complex edits into one click and reached 23M installs in its first quarter.',
+    'redbull-400-game': 'A browser game for Red Bull Japan that lets players race up the Sapporo ski jump.',
+    'respect-effect-app': 'A gamified app that helps teens build respectful friendships online, co-designed with 87 high school students.',
+    'besure': 'A fintech platform where people crowdsource and fund new insurance products together.',
+    'adp-my-aline': 'Member tools that help ADP users understand their pay and plan for savings and retirement.',
+    'thats-not-cool': 'A redesign of the Futures Without Violence site for teens, which won a Webby for Best Non-Profit Site.',
+    'adobe-express': 'Adobe\u2019s AI creative platform, including a free education version used by 2.3M students.',
+    'modular-suite-for-xd': 'Three Adobe XD plugins that let designers and non-designers work together in one app.',
+    'modere-ecommerce-site': 'A redesign of Modere\u2019s Japanese site into a wellness community, lifting conversion by 30%.',
+    'loop-app': 'A mini app inside LINE that lets anyone quickly make and share animated content.',
+    'adobe-express-enterprise-platform': 'Opening Adobe Express up as an embeddable platform, with an SDK and plugin marketplace for partners.',
+    'legalon': 'A shared brand and product platform that grew LegalOn from legal AI into a suite of seven AI business products.',
+    'walmart': 'An AI-first mobile shopping redesign with multimodal search, an AR shopping wizard and virtual try-on.'
+  };
+
+  // Path geometry (Figma units). Cards sit on an arc and rotate with it:
+  // x = CX + RX*sin(a), y = CY + RY*(1 - cos(a)), rotation = a.
+  var CX = 864, CY = 353, RX = 1620, RY = 2400;   // CX/CY are reset for narrow panels in fit()
+  var STEP = 15;                       // degrees between neighbouring cards
+  var SPEED = 4;                        // degrees per second, left to right
+  var N = WORK.length;
+  var SPAN = N * STEP;                 // full ring
+  var START = -2 * STEP;               // first card begins at -30deg (far left in the design)
+  var HOVER_SCALE = 1.12;              // card grows this much under the pointer
+  var VISIBLE = 52;                    // beyond this the card is off-stage; fade it out
+
+  var label = document.createElement('div');   // not a <p>: Squarespace's scroll animations tag every <p> with preFade/fadeIn
+  label.className = 'lsw-label';
+  label.setAttribute('aria-hidden', 'true');
+  var labelName = document.createElement('div');
+  labelName.className = 'lsw-label-name';
+  var labelDesc = document.createElement('div');
+  labelDesc.className = 'lsw-label-desc';
+  label.appendChild(labelName);
+  label.appendChild(labelDesc);
+  stage.appendChild(label);
+
+  var cards = WORK.map(function (w, i) {
+    var a = document.createElement('a');
+    a.className = 'lsw-card';
+    a.href = SITE + w[1];
+    a.target = '_top';
+    a.setAttribute('aria-label', w[0]);
+    var img = document.createElement('img');
+    img.src = CDN + w[2];
+    img.alt = w[0];
+    img.draggable = false;
+    img.decoding = 'async';
+    if (w[3]) img.style.transform = w[3];
+    var face = document.createElement('div');
+    face.className = 'lsw-face';
+    face.appendChild(img);
+    a.appendChild(face);
+    stage.appendChild(a);
+    a.face = face;
+    return a;
+  });
+
+  var scales = WORK.map(function () { return 1; });
+  var angs = WORK.map(function () { return 99; });   // each card's current angle, for finding the centre card
+  var narrow = null;
+  var stageScale = 1;
+  var hovered = -1;   // pointer/focus is on this card (pauses autoplay, shows label, brings it to front)
+
+  function render(offset) {
+    for (var i = 0; i < N; i++) {
+      // wrap each card's angle into [-SPAN/2, SPAN/2)
+      var a = (((START + i * STEP + offset + SPAN / 2) % SPAN) + SPAN) % SPAN - SPAN / 2;
+      var abs = Math.abs(a);
+      angs[i] = abs;
+      var el = cards[i];
+      if (abs > VISIBLE + 8) { el.style.visibility = 'hidden'; continue; }
+      var r = a * Math.PI / 180;
+      var x = CX + RX * Math.sin(r);
+      var y = CY + RY * (1 - Math.cos(r));
+      var fade = abs <= VISIBLE ? 1 : 1 - (abs - VISIBLE) / 8;
+      el.style.visibility = 'visible';
+      el.style.opacity = fade;
+      // Resting stack follows the Figma: each card overlaps the one to its left. Only hover lifts a card above the rest.
+      el.style.zIndex = i === hovered ? 400 : 200 + Math.round(a);
+      el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) rotate(' + a.toFixed(2) + 'deg)';
+      el.face.style.transform = 'scale(' + scales[i].toFixed(4) + ')';
+    }
+  }
+
+  function fit() {
+    var w = root.clientWidth;
+    var nw = w < 600;
+    if (nw !== narrow) {
+      narrow = nw;
+      root.classList.toggle('lsw--narrow', nw);
+      stage.style.width = (nw ? 640 : 1728) + 'px';
+      stage.style.height = (nw ? 1100 : 1117) + 'px';
+      CX = nw ? 320 : 864;
+      CY = nw ? 400 : 353;
+      (nw ? root : stage).appendChild(label);
+    }
+    stageScale = w / (nw ? 640 : 1728);
+    stage.style.transform = 'scale(' + stageScale + ')';
+    render(offset || 0);
+  }
+  fit();
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(root);
+  else window.addEventListener('resize', fit);
+
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var offset = 0, last = null, inView = true;
+  render(0);
+
+  // Autoplay; pause while the pointer is over a card, which also grows it, brings it to the front
+  // and shows its name. Hover is decided every frame from the pointer's last known position
+  // (what is actually under it), not from enter/leave events, which can go missing on a real page.
+  function setHover(i) {
+    if (i === hovered) return;
+    var was = hovered >= 0;
+    hovered = i;
+    var now = i >= 0;
+    if (now === was) return;                  // moving between cards keeps the hover look
+    root.classList.toggle('lsw--hover', now);
+  }
+
+  // Caption: the hovered card's name and summary. Where there is no hover (phones, narrow panels)
+  // it follows whichever card is nearest the centre of the arc instead, fading when it changes.
+  var autoLabel = function () {
+    return narrow || !(window.matchMedia && matchMedia('(hover: hover)').matches);
+  };
+  var shown = -1, swapTimer = null;
+  function putLabel(i) {
+    shown = i;
+    labelName.textContent = WORK[i][0];
+    labelDesc.textContent = DESC[WORK[i][1]] || '';
+    label.classList.add('is-on');
+  }
+  function syncLabel() {
+    var target = hovered;
+    if (target < 0 && autoLabel()) {
+      var best = 1e9;
+      for (var i = 0; i < N; i++) if (angs[i] < best) { best = angs[i]; target = i; }
+    }
+    if (target === shown) return;
+    clearTimeout(swapTimer);
+    if (target < 0) { label.classList.remove('is-on'); shown = -1; return; }
+    if (shown < 0) { putLabel(target); return; }
+    shown = target;
+    label.classList.remove('is-on');
+    swapTimer = setTimeout(function () { putLabel(shown); }, 170);
+  }
+  var px = null, py = null;
+  function forgetPointer() { px = py = null; }
+  document.addEventListener('pointermove', function (e) {
+    if (e.pointerType === 'touch') { forgetPointer(); return; } // no hover on touch screens
+    px = e.clientX; py = e.clientY;
+  }, { passive: true });
+  document.addEventListener('pointerdown', function (e) { if (e.pointerType === 'touch') forgetPointer(); }, { passive: true });
+  document.addEventListener('mouseout', function (e) { if (!e.relatedTarget) forgetPointer(); });
+  document.documentElement.addEventListener('mouseleave', forgetPointer);
+  window.addEventListener('blur', forgetPointer);
+  document.addEventListener('visibilitychange', forgetPointer);
+  cards.forEach(function (c, i) {   // keyboard users
+    c.addEventListener('focus', function () { if (c.matches(':focus-visible')) setHover(i); });
+    c.addEventListener('blur', function () { if (hovered === i) setHover(-1); });
+  });
+
+  function updateHover() {
+    if (px !== null) {
+      var el = document.elementFromPoint(px, py);
+      var c = el && el.closest ? el.closest('.lsw-card') : null;
+      var i = c ? cards.indexOf(c) : -1;
+      if (i !== hovered) setHover(i);
+    } else if (hovered >= 0 && !cards[hovered].matches(':focus-visible')) {
+      setHover(-1);
+    }
+  }
+  if (window.IntersectionObserver) {
+    new IntersectionObserver(function (e) { inView = e[0].isIntersecting; }).observe(root);
+  }
+
+  // Touch swiping: a sideways drag moves the ring, a flick carries on with momentum, and autoplay
+  // eases back in a moment after the finger lifts. Vertical movement is left to the page.
+  var DEG_PER_PX = function () { return 1 / (RX * Math.PI / 180 * stageScale); };  // ring degrees per screen px at the centre
+  var dragging = false, tracking = false, justDragged = false;
+  var sx = 0, sy = 0, lx = 0, lt = 0, vel = 0, resumeAt = 0, autoMix = 1, pid = null;
+  root.addEventListener('pointerdown', function (e) {
+    if (e.pointerType !== 'touch' || !e.isPrimary) return;
+    tracking = true; dragging = false;
+    sx = lx = e.clientX; sy = e.clientY; lt = performance.now(); vel = 0; pid = e.pointerId;
+  }, { passive: true });
+  root.addEventListener('pointermove', function (e) {
+    if (!tracking || e.pointerId !== pid) return;
+    if (!dragging) {
+      var dx0 = e.clientX - sx, dy0 = e.clientY - sy;
+      if (Math.abs(dx0) < 8 && Math.abs(dy0) < 8) return;
+      if (Math.abs(dx0) > Math.abs(dy0) * 1.2) {
+        dragging = true;
+        try { root.setPointerCapture(e.pointerId); } catch (err) {}
+      } else { tracking = false; return; }   // mostly vertical: let the page scroll
+    }
+    var now = performance.now();
+    var dx = e.clientX - lx;
+    var deg = dx * DEG_PER_PX();
+    offset += deg;
+    var dtm = Math.max((now - lt) / 1000, 0.001);
+    vel = vel * 0.6 + (deg / dtm) * 0.4;       // smoothed velocity in degrees per second
+    lx = e.clientX; lt = now;
+  }, { passive: true });
+  function endDrag(e, fling) {
+    if (!tracking || (e && e.pointerId !== pid)) return;
+    tracking = false;
+    if (dragging) {
+      dragging = false;
+      justDragged = true;
+      setTimeout(function () { justDragged = false; }, 60);
+      if (!fling || performance.now() - lt > 120) vel = 0;   // finger stopped before lifting: no fling
+      vel = Math.max(-150, Math.min(150, vel));
+      resumeAt = performance.now() + 1200;
+    }
+  }
+  root.addEventListener('pointerup', function (e) { endDrag(e, true); });
+  root.addEventListener('pointercancel', function (e) { endDrag(e, false); });
+  root.addEventListener('click', function (e) {   // a swipe that ends on a card must not open it
+    if (justDragged) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+
+  function tick(t) {
+    updateHover();
+    syncLabel();
+    if (last !== null && inView && !document.hidden) {
+      var dt = Math.min((t - last) / 1000, 0.1);
+      var allow = hovered < 0 && !reduce && !dragging && t > resumeAt;
+      if (hovered >= 0) autoMix = 0;   // hover stops the drift at once; after a swipe it eases back in
+      else autoMix += ((allow ? 1 : 0) - autoMix) * (1 - Math.exp(-dt * 4));
+      if (!dragging) {
+        offset += (SPEED * autoMix + vel) * dt;
+        vel *= Math.exp(-7 * dt);
+        if (Math.abs(vel) < 0.05) vel = 0;
+      }
+      var k = 1 - Math.pow(0.0005, dt); // ease toward target scale, frame-rate independent
+      for (var i = 0; i < N; i++) {
+        scales[i] += ((i === hovered ? HOVER_SCALE : 1) - scales[i]) * k;
+      }
+      render(offset);
+    }
+    last = t;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+
+<script type="module">
+  // Dither backgrounds: Paper "Dithering" shader, ripple / 8x8, two instances that cross-fade.
+  // IDLE = Dither-ripple-animation-1, HOVER = Dither-ripple-animation-2 (each keeps its own frame offset).
+  const BASE = 'https://cdn.jsdelivr.net/npm/@paper-design/shaders@0.0.81/dist/';
+  const IDLE  = { color: '#36424F', speed: 0.79, size: 2.4, scale: 0.99, frame: 4448743.384 };
+  const HOVER = { color: '#292938', speed: 0.93, size: 3.4, scale: 0.88, frame: 5361600.472, back: '#0C0D14' };
+  const BACK = '#151B21';          // idle frame's background
+
+  const root = document.querySelector('.lsw');
+  const hostIdle = root && root.querySelector('.lsw-bg:not(.lsw-bg-hover)');
+  const hostHover = root && root.querySelector('.lsw-bg-hover');
+  if (hostIdle && hostHover) {
+    try {
+      const [m, d, z, c] = await Promise.all([
+        import(BASE + 'shader-mount.js'),
+        import(BASE + 'shaders/dithering.js'),
+        import(BASE + 'shader-sizing.js'),
+        import(BASE + 'get-shader-color-from-string.js')
+      ]);
+      const uniforms = (p) => ({
+        u_colorBack: [0, 0, 0, 0],            // transparent: the section background shows through
+        u_colorFront: c.getShaderColorFromString(p.color),
+        u_shape: d.DitheringShapes.ripple,
+        u_type: d.DitheringTypes['8x8'],
+        u_pxSize: p.size,
+        u_scale: p.scale,
+        u_rotation: 0, u_offsetX: 0, u_offsetY: 0, u_originX: 0.5, u_originY: 0.5,
+        u_worldWidth: 0, u_worldHeight: 0,
+        u_fit: z.ShaderFitOptions.none
+      });
+      hostIdle.style.backgroundColor = BACK;
+      hostHover.style.backgroundColor = HOVER.back;
+      const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const idle = new m.ShaderMount(hostIdle, d.ditheringFragmentShader, uniforms(IDLE), undefined, reduce ? 0 : IDLE.speed, IDLE.frame);
+      const hover = new m.ShaderMount(hostHover, d.ditheringFragmentShader, uniforms(HOVER), undefined, 0, HOVER.frame);
+
+      // The hover shader only runs while it is showing (and for the fade-out after).
+      let pauseTimer = 0;
+      new MutationObserver(() => {
+        clearTimeout(pauseTimer);
+        if (root.classList.contains('lsw--hover')) {
+          if (!reduce) hover.setSpeed(HOVER.speed);
+        } else {
+          pauseTimer = setTimeout(() => hover.setSpeed(0), 500);   // after the fade-out
+        }
+      }).observe(root, { attributes: true, attributeFilter: ['class'] });
+    } catch (err) {
+      // Module or WebGL unavailable: the dark background colour stays.
+    }
+  }
+</script>
