@@ -21,8 +21,10 @@
     aspect-ratio: 1728 / 1117;
     overflow: hidden;
     background: #151B21; /* shows until the shader starts (and if WebGL is unavailable) */
+    cursor: grab;
     touch-action: pan-y; /* page still scrolls vertically; sideways drags come to the script for swiping */
   }
+  .lsw.lsw--dragging { cursor: grabbing; }
   .lsw-bg {
     position: absolute;
     inset: 0;
@@ -404,6 +406,7 @@
   });
 
   function updateHover() {
+    if (dragging) { setHover(-1); return; }   // no lift/wobble/audio while the ring is being dragged
     if (px !== null) {
       var el = document.elementFromPoint(px, py);
       var c = el && el.closest ? el.closest('.lsw-card') : null;
@@ -417,13 +420,13 @@
     new IntersectionObserver(function (e) { inView = e[0].isIntersecting; }).observe(root);
   }
 
-  // Touch swiping: a sideways drag moves the ring, a flick carries on with momentum, and autoplay
+  // Swiping (touch) and dragging (mouse, desktop): a sideways drag moves the ring, a flick carries on with momentum, and autoplay
   // eases back in a moment after the finger lifts. Vertical movement is left to the page.
   var DEG_PER_PX = function () { return 1 / (RX * Math.PI / 180 * stageScale); };  // ring degrees per screen px at the centre
   var dragging = false, tracking = false, justDragged = false;
   var sx = 0, sy = 0, lx = 0, lt = 0, vel = 0, resumeAt = 0, autoMix = 1, pid = null;
   root.addEventListener('pointerdown', function (e) {
-    if (e.pointerType !== 'touch' || !e.isPrimary) return;
+    if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;   // touch, pen, or the left mouse button
     tracking = true; dragging = false;
     sx = lx = e.clientX; sy = e.clientY; lt = performance.now(); vel = 0; pid = e.pointerId;
   }, { passive: true });
@@ -434,6 +437,7 @@
       if (Math.abs(dx0) < 8 && Math.abs(dy0) < 8) return;
       if (Math.abs(dx0) > Math.abs(dy0) * 1.2) {
         dragging = true;
+        root.classList.add('lsw--dragging');
         try { root.setPointerCapture(e.pointerId); } catch (err) {}
       } else { tracking = false; return; }   // mostly vertical: let the page scroll
     }
@@ -450,6 +454,7 @@
     tracking = false;
     if (dragging) {
       dragging = false;
+      root.classList.remove('lsw--dragging');
       justDragged = true;
       setTimeout(function () { justDragged = false; }, 60);
       if (!fling || performance.now() - lt > 120) vel = 0;   // finger stopped before lifting: no fling
@@ -459,6 +464,7 @@
   }
   root.addEventListener('pointerup', function (e) { endDrag(e, true); });
   root.addEventListener('pointercancel', function (e) { endDrag(e, false); });
+  root.addEventListener('dragstart', function (e) { e.preventDefault(); });   // no ghost image when dragging a card link
   root.addEventListener('click', function (e) {   // a swipe that ends on a card must not open it
     if (justDragged) { e.preventDefault(); e.stopPropagation(); }
   }, true);
