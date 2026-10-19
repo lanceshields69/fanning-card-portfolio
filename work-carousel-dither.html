@@ -7,6 +7,7 @@
   <div class="lsw-bg" aria-hidden="true"></div>
   <div class="lsw-bg lsw-bg-hover" aria-hidden="true"></div>
   <div class="lsw-stage"></div>
+  <iframe class="lsw-audio" title="Lucky Static, I Am Robot and Proud" width="1" height="1" scrolling="no" frameborder="no" allow="autoplay; encrypted-media" tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0" src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A496851891&amp;auto_play=false&amp;visual=false"></iframe>
 </div>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -320,6 +321,26 @@
     var now = i >= 0;
     if (now === was) return;                  // moving between cards keeps the hover look
     root.classList.toggle('lsw--hover', now);
+    audioHover(now);
+  }
+
+  // Hover audio: SoundCloud widget (hidden iframe). Plays while a card is hovered, pauses on leave.
+  // Browsers only allow sound after the visitor has interacted with the page once, so before that the play call is ignored.
+  var scWidget = null, scLoading = false;
+  function withWidget(fn) {
+    if (scWidget) { fn(scWidget); return; }
+    if (scLoading) return;
+    scLoading = true;
+    var go = function () { scWidget = SC.Widget(root.querySelector('.lsw-audio')); scWidget.bind(SC.Widget.Events.READY, function () { fn(scWidget); }); };
+    if (window.SC && SC.Widget) { go(); return; }
+    var t = document.createElement('script');
+    t.src = 'https://w.soundcloud.com/player/api.js';
+    t.onload = go;
+    document.head.appendChild(t);
+  }
+  function audioHover(on) {
+    if (on) withWidget(function (w) { if (hovered >= 0) { w.setVolume(80); w.play(); } });
+    else if (scWidget) scWidget.pause();
   }
 
   // Caption: the hovered card's name and summary. Where there is no hover (phones, narrow panels)
