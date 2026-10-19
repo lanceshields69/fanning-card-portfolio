@@ -261,6 +261,9 @@
   });
 
   var scales = WORK.map(function () { return 1; });
+  var wob = WORK.map(function () { return 0; });    // hover wobble: rotation offset (deg) on a damped spring
+  var wobV = WORK.map(function () { return 0; });  // ...and its velocity
+  var WOBBLE_KICK = 90;                            // deg/s kick when the pointer lands; bigger = wobblier
   var angs = WORK.map(function () { return 99; });   // each card's current angle, for finding the centre card
   var narrow = null;
   var stageScale = 1;
@@ -283,7 +286,7 @@
       // Resting stack follows the Figma: each card overlaps the one to its left. Only hover lifts a card above the rest.
       el.style.zIndex = i === hovered ? 400 : 200 + Math.round(a);
       el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) rotate(' + a.toFixed(2) + 'deg)';
-      el.face.style.transform = 'scale(' + scales[i].toFixed(4) + ')';
+      el.face.style.transform = 'scale(' + scales[i].toFixed(4) + ') rotate(' + wob[i].toFixed(2) + 'deg)';
     }
   }
 
@@ -321,6 +324,7 @@
     var now = i >= 0;
     if (now === was) return;                  // moving between cards keeps the hover look
     root.classList.toggle('lsw--hover', now);
+    if (now && !reduce) wobV[i] += WOBBLE_KICK * (Math.random() < 0.5 ? -1 : 1);
     audioHover(now);
   }
 
@@ -473,6 +477,10 @@
       var k = 1 - Math.pow(0.0005, dt); // ease toward target scale, frame-rate independent
       for (var i = 0; i < N; i++) {
         scales[i] += ((i === hovered ? HOVER_SCALE : 1) - scales[i]) * k;
+        // damped spring back to 0: overshoots a few times, then settles (the tween out)
+        wobV[i] += (-170 * wob[i] - 9 * wobV[i]) * dt;
+        wob[i] += wobV[i] * dt;
+        if (Math.abs(wob[i]) < 0.01 && Math.abs(wobV[i]) < 0.1) wob[i] = wobV[i] = 0;
       }
       render(offset);
     }
