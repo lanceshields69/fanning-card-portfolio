@@ -263,7 +263,8 @@
   var scales = WORK.map(function () { return 1; });
   var wob = WORK.map(function () { return 0; });    // hover wobble: rotation offset (deg) on a damped spring
   var wobV = WORK.map(function () { return 0; });  // ...and its velocity
-  var WOBBLE_KICK = 90;                            // deg/s kick when the pointer lands; bigger = wobblier
+  var WOBBLE_KICK = 40;                            // extra deg/s kick when the pointer lands; bigger = wobblier
+  var angSigned = WORK.map(function () { return 0; }); // each card's current angle on the arc (deg)
   var angs = WORK.map(function () { return 99; });   // each card's current angle, for finding the centre card
   var narrow = null;
   var stageScale = 1;
@@ -275,6 +276,7 @@
       var a = (((START + i * STEP + offset + SPAN / 2) % SPAN) + SPAN) % SPAN - SPAN / 2;
       var abs = Math.abs(a);
       angs[i] = abs;
+      angSigned[i] = a;
       var el = cards[i];
       if (abs > VISIBLE + 8) { el.style.visibility = 'hidden'; continue; }
       var r = a * Math.PI / 180;
@@ -477,10 +479,12 @@
       var k = 1 - Math.pow(0.0005, dt); // ease toward target scale, frame-rate independent
       for (var i = 0; i < N; i++) {
         scales[i] += ((i === hovered ? HOVER_SCALE : 1) - scales[i]) * k;
-        // damped spring back to 0: overshoots a few times, then settles (the tween out)
-        wobV[i] += (-170 * wob[i] - 9 * wobV[i]) * dt;
+        // damped spring toward the target angle: overshoots a few times, then settles (the wobble)
+        // hovered card: target cancels its arc angle, so it ends up horizontal; otherwise target 0 (back on the arc)
+        var wt = i === hovered ? -angSigned[i] : 0;
+        wobV[i] += (-170 * (wob[i] - wt) - 9 * wobV[i]) * dt;
         wob[i] += wobV[i] * dt;
-        if (Math.abs(wob[i]) < 0.01 && Math.abs(wobV[i]) < 0.1) wob[i] = wobV[i] = 0;
+        if (Math.abs(wob[i] - wt) < 0.01 && Math.abs(wobV[i]) < 0.1) { wob[i] = wt; wobV[i] = 0; }
       }
       render(offset);
     }
