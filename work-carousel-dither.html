@@ -7,7 +7,7 @@
   <div class="lsw-bg" aria-hidden="true"></div>
   <div class="lsw-bg lsw-bg-hover" aria-hidden="true"></div>
   <div class="lsw-stage"></div>
-  <iframe class="lsw-audio" title="Lucky Static, I Am Robot and Proud" width="1" height="1" scrolling="no" frameborder="no" allow="autoplay; encrypted-media" tabindex="-1" aria-hidden="true" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0" src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A496851891&amp;auto_play=false&amp;visual=false"></iframe>
+  <iframe class="lsw-audio" title="Lucky Static, I Am Robot and Proud" width="300" height="166" scrolling="no" frameborder="no" allow="autoplay; encrypted-media" tabindex="-1" aria-hidden="true" style="position:absolute;left:0;bottom:0;width:300px;height:166px;opacity:0;z-index:-1;pointer-events:none;border:0" src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A496851891&amp;auto_play=false&amp;visual=false"></iframe>
 </div>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -338,6 +338,18 @@
     t.onload = go;
     document.head.appendChild(t);
   }
+  // Unlock: the first click/tap/key anywhere on the page starts the widget silently and pauses it again,
+  // so later hover plays are allowed by the browser's autoplay policy.
+  function unlockAudio() {
+    ['pointerdown', 'keydown'].forEach(function (t) { document.removeEventListener(t, unlockAudio, true); });
+    withWidget(function (w) {
+      if (hovered >= 0) { w.setVolume(80); w.play(); return; }
+      w.setVolume(0);
+      w.play();
+      setTimeout(function () { if (hovered < 0) w.pause(); w.setVolume(80); }, 150);
+    });
+  }
+  ['pointerdown', 'keydown'].forEach(function (t) { document.addEventListener(t, unlockAudio, true); });
   function audioHover(on) {
     if (on) withWidget(function (w) { if (hovered >= 0) { w.setVolume(80); w.play(); } });
     else if (scWidget) scWidget.pause();
